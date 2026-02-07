@@ -1,4 +1,5 @@
 ---
+name: powerdrill-data-analysis
 description: This skill should be used when the user wants to analyze, explore, visualize, or query data using the Powerdrill MCP server. Covers listing, creating, and deleting datasets; uploading local files as data sources; creating analysis sessions; running natural-language data analysis queries; and retrieving charts, tables, and insights. Triggers on requests like "analyze my data", "query my dataset", "upload this file for analysis", "list my datasets", "create a dataset", "visualize sales trends", "continue my previous analysis", "delete this dataset", or any data exploration task mentioning Powerdrill or targeting an available Powerdrill MCP connection.
 ---
 
