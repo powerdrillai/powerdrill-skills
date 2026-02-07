@@ -1,6 +1,6 @@
 # Powerdrill Data Analysis Skill
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for AI-powered data analysis using the [Powerdrill](https://powerdrill.ai) platform. Upload datasets, ask natural-language questions, and get insights with charts, tables, and analytical reports.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for AI-powered data analysis using the [Powerdrill](https://chat.powerdrill.ai/) platform. Upload datasets, ask natural-language questions, and get insights with charts, tables, and analytical reports.
 
 ## What This Does
 
