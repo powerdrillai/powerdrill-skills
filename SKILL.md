@@ -1,6 +1,6 @@
 ---
 name: powerdrill-data-analysis
-description: This skill should be used when the user wants to analyze, explore, visualize, or query data using the Powerdrill MCP server. Covers listing, creating, and deleting datasets; uploading local files as data sources; creating analysis sessions; running natural-language data analysis queries; and retrieving charts, tables, and insights. Triggers on requests like "analyze my data", "query my dataset", "upload this file for analysis", "list my datasets", "create a dataset", "visualize sales trends", "continue my previous analysis", "delete this dataset", or any data exploration task mentioning Powerdrill or targeting an available Powerdrill MCP connection.
+description: This skill should be used when the user wants to analyze, explore, visualize, or query data using Powerdrill. Covers listing, creating, and deleting datasets; uploading local files as data sources; creating analysis sessions; running natural-language data analysis queries; and retrieving charts, tables, and insights. Triggers on requests like "analyze my data", "query my dataset", "upload this file for analysis", "list my datasets", "create a dataset", "visualize sales trends", "continue my previous analysis", "delete this dataset", or any data exploration task mentioning Powerdrill.
 license: MIT
 compatibility: claude
 metadata:
@@ -8,188 +8,278 @@ metadata:
   workflow: powerdrill
 ---
 
-# Powerdrill Data Analysis MCP Skill
+# Powerdrill Data Analysis Skill
 
-The Powerdrill Data Analysis MCP server provides data analysis capabilities through the tools below. Use them to explore, analyze, and manage data on the Powerdrill platform.
+Analyze data using the Powerdrill API via the Python client at `scripts/powerdrill_client.py`. All operations use the Powerdrill REST API v2 (`https://ai.data.cloud/api`).
 
 ## Prerequisites & Setup
 
-Before using any Powerdrill tools, the user must have:
+Before using any Powerdrill functions, the user must have:
 
-1. **A Powerdrill Teamspace** - Created by following the setup tutorial at: https://www.youtube.com/watch?v=I-0yGD9HeDw
-2. **API Credentials** - Obtained by following the API key tutorial at: https://www.youtube.com/watch?v=qs-GsUgjb1g
+1. **A Powerdrill Teamspace** - Created by following: https://www.youtube.com/watch?v=I-0yGD9HeDw
+2. **API Credentials** - Obtained by following: https://www.youtube.com/watch?v=qs-GsUgjb1g
 
-The following environment variables must be configured in the MCP server settings:
-- `POWERDRILL_USER_ID` - The user's Powerdrill User ID
-- `POWERDRILL_PROJECT_API_KEY` - The user's Powerdrill Project API Key
+Set these environment variables before running any script:
 
-If a tool call fails with an authentication error or missing credentials, instruct the user to:
-1. Verify their `POWERDRILL_USER_ID` and `POWERDRILL_PROJECT_API_KEY` are correctly set
-2. Watch the setup videos above if they haven't created a Teamspace or obtained API keys yet
-
-### MCP Server Configuration
-
-The Powerdrill MCP server can be added to Claude Code's MCP configuration. Example `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "powerdrill": {
-      "command": "npx",
-      "args": ["-y", "@powerdrillai/powerdrill-mcp"],
-      "env": {
-        "POWERDRILL_USER_ID": "your_user_id",
-        "POWERDRILL_PROJECT_API_KEY": "your_project_api_key"
-      }
-    }
-  }
-}
+```bash
+export POWERDRILL_USER_ID="your_user_id"
+export POWERDRILL_PROJECT_API_KEY="your_project_api_key"
 ```
 
-## Available Tools
+The only Python dependency is `requests`. Install with: `pip install requests`
 
-### 1. `mcp_powerdrill_list_datasets`
-Lists available datasets from the user's Powerdrill account.
+If a call fails with an authentication error, verify the two environment variables are set and the API key is valid.
 
-**Parameters:**
-- `limit` (number, optional) - Maximum number of datasets to return
-- `pageNumber` (number, optional) - Page number (default: 1)
-- `pageSize` (number, optional) - Items per page (default: 10)
-- `search` (string, optional) - Search datasets by name
+## How to Use
 
-**When to use:** When the user wants to see what datasets they have, find a specific dataset, or browse available data. This is typically the first step in any analysis workflow.
+Import the client module and call functions directly. All functions read credentials from the environment automatically.
 
-### 2. `mcp_powerdrill_get_dataset_overview`
-Retrieves detailed overview information for a specific dataset including summary, exploration questions, and keywords.
+```python
+import sys
+sys.path.insert(0, "/absolute/path/to/scripts")  # adjust to actual location
+from powerdrill_client import *
+```
 
-**Parameters:**
-- `datasetId` (string, required) - The ID of the dataset
+Or run via CLI:
 
-**When to use:** When the user wants to understand what's in a dataset, get suggested exploration questions, or see a dataset summary. Often used after listing datasets.
+```bash
+python scripts/powerdrill_client.py <command> [args]
+```
 
-### 3. `mcp_powerdrill_list_data_sources`
-Lists individual data sources (files) within a specific dataset.
+## Available Functions
 
-**Parameters:**
-- `datasetId` (string, required) - The ID of the dataset
-- `pageNumber` (number, optional) - Page number (default: 1)
-- `pageSize` (number, optional) - Items per page (default: 10)
-- `status` (string, optional) - Filter by status: `synching`, `invalid`, `synched` (comma-separated for multiple)
+### Datasets
 
-**When to use:** When the user wants to see which files are in a dataset, check data source sync status, or identify specific data sources for targeted analysis.
+#### `list_datasets(page_number=1, page_size=10, search=None) -> dict`
+List datasets in the user's account. Typically the first step in any workflow.
 
-### 4. `mcp_powerdrill_create_session`
-Creates a new analysis session to group related analysis jobs together. Sessions maintain context across multiple queries.
+```python
+result = list_datasets(search="sales")
+for ds in result["data"]["records"]:
+    print(ds["id"], ds["name"])
+```
 
-**Parameters:**
-- `name` (string, required) - Session name (up to 128 characters)
-- `output_language` (string, optional) - Output language. Options: `AUTO`, `EN`, `ES`, `AR`, `PT`, `ID`, `JA`, `RU`, `HI`, `FR`, `DE`, `VI`, `TR`, `PL`, `IT`, `KO`, `ZH-CN`, `ZH-TW` (default: `AUTO`)
-- `job_mode` (string, optional) - `AUTO` or `DATA_ANALYTICS` (default: `AUTO`)
-- `max_contextual_job_history` (number, optional) - Max recent jobs retained as context, 0-10 (default: 10)
-- `agent_id` (string, optional) - Agent ID. Currently only `DATA_ANALYSIS_AGENT` is available (default: `DATA_ANALYSIS_AGENT`)
+#### `create_dataset(name, description="") -> dict`
+Create a new empty dataset. Returns `{"data": {"id": "dset-..."}}`.
 
-**When to use:** Before running analysis jobs. A session must be created first to provide a `session_id` for `create_job`. Create a new session for each new analysis topic or conversation thread.
+```python
+ds = create_dataset("Q4 Sales Data", "Quarterly sales analysis")
+dataset_id = ds["data"]["id"]
+```
 
-### 5. `mcp_powerdrill_create_job`
-Executes a data analysis query using natural language against a dataset. This is the primary analysis tool.
+#### `get_dataset_overview(dataset_id) -> dict`
+Get dataset summary, exploration questions, and keywords. Use after data sources are synced.
 
-**Parameters:**
-- `question` (string, required) - Natural language question or prompt to analyze the data
-- `dataset_id` (string, required) - The ID of the dataset to analyze
-- `session_id` (string, required) - Session ID to group related jobs (from `create_session`)
-- `datasource_ids` (array of strings, optional) - Specific data source IDs within the dataset to analyze
-- `stream` (boolean, optional) - Whether to stream results (default: false)
-- `output_language` (string, optional) - Output language (default: `AUTO`)
-- `job_mode` (string, optional) - Job mode (default: `AUTO`)
+```python
+overview = get_dataset_overview(dataset_id)
+print(overview["data"]["summary"])
+for q in overview["data"]["exploration_questions"]:
+    print(f"  - {q}")
+```
 
-**When to use:** When the user asks a data analysis question. This is the core tool for getting insights from data. Always ensure you have a valid `session_id` (create one if needed) and `dataset_id` before calling this tool.
+#### `get_dataset_status(dataset_id) -> dict`
+Check how many data sources are synced/syncing/invalid.
 
-**Response format:** Returns blocks of content that may include:
-- `TEXT` blocks - Analytical text responses
-- `TABLE` blocks - URLs to generated table results
-- `IMAGE` blocks - URLs to generated chart/visualization images
+```python
+status = get_dataset_status(dataset_id)
+# status["data"] = {"synched_count": 3, "synching_count": 0, "invalid_count": 0}
+```
 
-### 6. `mcp_powerdrill_list_sessions`
-Lists existing analysis sessions.
+#### `delete_dataset(dataset_id) -> dict`
+Permanently delete a dataset and all its data sources. **Irreversible** - always confirm with the user first.
 
-**Parameters:**
-- `pageNumber` (number, optional) - Page number (default: 1)
-- `pageSize` (number, optional) - Items per page (default: 10)
-- `search` (string, optional) - Search sessions by name
+### Data Sources
 
-**When to use:** When the user wants to continue a previous analysis session or see their analysis history.
+#### `list_data_sources(dataset_id, page_number=1, page_size=10, status=None) -> dict`
+List files within a dataset. Filter by status: `synched`, `synching`, `invalid`.
 
-### 7. `mcp_powerdrill_create_dataset`
-Creates a new empty dataset to organize data sources.
+```python
+sources = list_data_sources(dataset_id, status="synched")
+```
 
-**Parameters:**
-- `name` (string, required) - Dataset name (up to 128 characters)
-- `description` (string, optional) - Dataset description (up to 128 characters)
+#### `create_data_source(dataset_id, name, *, url=None, file_object_key=None) -> dict`
+Create a data source from a public URL or an uploaded file key. Provide exactly one of `url` or `file_object_key`.
 
-**When to use:** When the user wants to create a new dataset to upload files into.
+```python
+# From public URL
+ds = create_data_source(dataset_id, "report.pdf", url="https://example.com/report.pdf")
 
-### 8. `mcp_powerdrill_create_data_source_from_local_file`
-Uploads a local file to a dataset as a new data source. Handles multipart upload and waits for sync completion.
+# From uploaded file (see upload_local_file)
+ds = create_data_source(dataset_id, "data.csv", file_object_key=key)
+```
 
-**Parameters:**
-- `dataset_id` (string, required) - The ID of the dataset to upload into
-- `file_path` (string, required) - Local path to the file to upload
-- `file_name` (string, optional) - Custom name for the file (defaults to original filename)
-- `chunk_size` (number, optional) - Upload chunk size in bytes (default: 5MB). Increase for large files to reduce upload overhead; decrease if uploads fail on slow connections.
+#### `upload_local_file(file_path) -> str`
+Upload a local file via multipart upload. Returns `file_object_key` for use with `create_data_source()`.
 
-**When to use:** When the user wants to upload a file for analysis. The tool handles the full upload process including chunked upload and sync status polling.
+Supported formats: `.csv`, `.tsv`, `.md`, `.mdx`, `.json`, `.txt`, `.pdf`, `.pptx`, `.docx`, `.xls`, `.xlsx`
 
-### 9. `mcp_powerdrill_delete_dataset`
-Permanently deletes a dataset and all its data sources.
+#### `upload_and_create_data_source(dataset_id, file_path) -> dict`
+Convenience function: uploads a local file then creates the data source in one call.
 
-**Parameters:**
-- `datasetId` (string, required) - The ID of the dataset to delete
+```python
+result = upload_and_create_data_source(dataset_id, "/path/to/sales.csv")
+datasource_id = result["data"]["id"]
+```
 
-**When to use:** When the user explicitly wants to remove a dataset. This action is irreversible and destroys all data sources within the dataset. Always confirm with the user before proceeding, stating exactly which dataset will be deleted.
+#### `wait_for_dataset_sync(dataset_id, max_attempts=30, delay_seconds=3.0) -> dict`
+Poll until all data sources in the dataset are synced. Raises `RuntimeError` on timeout or if invalid sources are detected.
+
+```python
+upload_and_create_data_source(dataset_id, "data.csv")
+wait_for_dataset_sync(dataset_id)  # blocks until synced
+```
+
+### Sessions
+
+#### `create_session(name, output_language="AUTO", job_mode="AUTO", max_contextual_job_history=10) -> dict`
+Create an analysis session. Required before running jobs.
+
+```python
+session = create_session("Sales Analysis Session")
+session_id = session["data"]["id"]
+```
+
+#### `list_sessions(page_number=1, page_size=10, search=None) -> dict`
+List existing sessions. Use to find a previous session for resumption.
+
+#### `delete_session(session_id) -> dict`
+Delete a session. Use during cleanup after analysis is complete.
+
+### Jobs (Data Analysis)
+
+#### `create_job(session_id, question, dataset_id=None, datasource_ids=None, stream=False, output_language="AUTO", job_mode="AUTO") -> dict`
+Run a natural-language analysis query. This is the core analysis function.
+
+**Non-streaming** (default): returns full response with all blocks.
+
+```python
+result = create_job(session_id, "What are the top 5 products by revenue?", dataset_id=dataset_id)
+for block in result["data"]["blocks"]:
+    if block["type"] == "MESSAGE":
+        print(block["content"])
+    elif block["type"] == "TABLE":
+        print(f"Table: {block['content']['url']}")
+    elif block["type"] == "IMAGE":
+        print(f"Chart: {block['content']['url']}")
+```
+
+**Streaming**: returns parsed result with accumulated text and separate blocks.
+
+```python
+result = create_job(session_id, "Summarize trends", dataset_id=dataset_id, stream=True)
+print(result["text"])        # accumulated MESSAGE text
+for b in result["blocks"]:   # TABLE, IMAGE, etc.
+    print(b["type"], b["content"])
+```
+
+**Response block types:**
+- `MESSAGE` - Analytical text
+- `CODE` - Code snippets (Markdown)
+- `TABLE` - `{name, url, expires_at}` - download before expiration
+- `IMAGE` - `{name, url, expires_at}` - download before expiration
+- `SOURCES` - Citation references
+- `QUESTIONS` - Suggested follow-up questions
+- `CHART_INFO` - Chart configuration and data
+
+### Cleanup
+
+#### `cleanup(session_id=None, dataset_id=None) -> None`
+Delete session and/or dataset after analysis. Always call this when done.
+
+```python
+cleanup(session_id=session_id, dataset_id=dataset_id)
+```
+
+#### `cleanup_session(session_id) -> None` / `cleanup_dataset(dataset_id) -> None`
+Delete individual resources. Errors are logged but not raised.
 
 ## Recommended Workflows
 
-### Analyzing existing data
-1. `list_datasets` - Find the target dataset
-2. `get_dataset_overview` - Understand the data and get suggested questions
-3. `create_session` - Create an analysis session
-4. `create_job` - Ask analysis questions against the dataset
-5. Continue asking follow-up questions using the same session for context continuity
+### Full analysis workflow (upload, analyze, cleanup)
 
-### Uploading and analyzing new data
-1. `create_dataset` - Create a new dataset
-2. `create_data_source_from_local_file` - Upload data file(s)
-3. `get_dataset_overview` - Review the processed data
-4. `create_session` - Start an analysis session
-5. `create_job` - Begin analysis
+```python
+from powerdrill_client import *
 
-### Exploring data sources
-1. `list_datasets` - Browse datasets
-2. `list_data_sources` - See files within a dataset
-3. `get_dataset_overview` - Get summary and suggested exploration questions
+# 1. Create dataset and upload data
+ds = create_dataset("My Analysis")
+dataset_id = ds["data"]["id"]
 
-### Resuming a previous analysis
-1. `list_sessions` - Find the previous session by name
-2. `list_datasets` - Confirm the target dataset is still available
-3. `create_job` - Continue asking questions using the existing `session_id`
+upload_and_create_data_source(dataset_id, "/path/to/data.csv")
+wait_for_dataset_sync(dataset_id)
 
-### Cleaning up data
-1. `list_datasets` - Identify datasets to remove
-2. `delete_dataset` - Delete after explicit user confirmation
+# 2. Create session and run analysis
+session = create_session("Analysis Session")
+session_id = session["data"]["id"]
+
+result = create_job(session_id, "What are the key trends?", dataset_id=dataset_id)
+for block in result["data"]["blocks"]:
+    if block["type"] == "MESSAGE":
+        print(block["content"])
+
+# 3. Ask follow-up questions (same session for context)
+result = create_job(session_id, "Break this down by region", dataset_id=dataset_id)
+
+# 4. Cleanup when done
+cleanup(session_id=session_id, dataset_id=dataset_id)
+```
+
+### Analyze existing dataset
+
+```python
+from powerdrill_client import *
+
+# 1. Find the dataset
+datasets = list_datasets(search="sales")
+dataset_id = datasets["data"]["records"][0]["id"]
+
+# 2. Explore it
+overview = get_dataset_overview(dataset_id)
+print(overview["data"]["summary"])
+
+# 3. Create session and analyze
+session = create_session("Quick Analysis")
+session_id = session["data"]["id"]
+
+result = create_job(session_id, overview["data"]["exploration_questions"][0], dataset_id=dataset_id)
+
+# 4. Cleanup session when done (keep dataset)
+cleanup_session(session_id)
+```
+
+### CLI usage
+
+```bash
+# List datasets
+python scripts/powerdrill_client.py list-datasets --search "sales"
+
+# Create dataset + upload file
+python scripts/powerdrill_client.py create-dataset "Test Data"
+python scripts/powerdrill_client.py upload-file dset-xxx /path/to/file.csv
+python scripts/powerdrill_client.py wait-sync dset-xxx
+
+# Create session and run a job
+python scripts/powerdrill_client.py create-session "My Session"
+python scripts/powerdrill_client.py create-job SESSION_ID "Summarize the data" --dataset-id dset-xxx
+
+# Cleanup
+python scripts/powerdrill_client.py cleanup --session-id SESSION_ID --dataset-id dset-xxx
+```
 
 ## Error Handling
 
-- **Authentication errors:** Verify `POWERDRILL_USER_ID` and `POWERDRILL_PROJECT_API_KEY` are set correctly. Direct the user to the setup videos if credentials are missing.
-- **Dataset not found:** Re-run `list_datasets` to verify the dataset ID. The dataset may have been deleted.
-- **Job execution failure:** Check that the dataset has at least one data source with status `synched`. Retry with a rephrased question if the error is ambiguous.
-- **Upload timeout:** The `create_data_source_from_local_file` tool polls for sync completion up to 20 attempts. If it times out, use `list_data_sources` with `status=synching` to check progress manually.
-- **Rate limiting:** If API calls return rate-limit errors, wait before retrying. Space out rapid sequential tool calls.
+- **Authentication errors:** Verify `POWERDRILL_USER_ID` and `POWERDRILL_PROJECT_API_KEY`. Direct the user to the setup videos above.
+- **Dataset not found:** Re-run `list_datasets()` to verify the ID. The dataset may have been deleted.
+- **Job execution failure:** Ensure the dataset has at least one synced data source (`wait_for_dataset_sync()`). Retry with a rephrased question.
+- **Upload timeout:** `wait_for_dataset_sync()` polls up to 30 attempts (90s). Use `get_dataset_status()` to check manually.
+- **Invalid data sources:** Check file format is supported. Re-upload with correct file type.
+- **Rate limiting:** Wait before retrying. Space out rapid sequential API calls.
 
 ## Important Notes
 
 - Always create a session before running analysis jobs
+- Always call `cleanup()` to delete sessions and datasets after analysis is complete
 - Sessions maintain conversational context - reuse the same session for related follow-up questions
-- The `create_job` response may contain URLs to tables and images that expire. Advise users to download or save results promptly
-- When uploading files, the tool polls until the data source is fully synced before returning
+- TABLE and IMAGE URLs in job responses expire - download or present results promptly
+- Call `wait_for_dataset_sync()` after uploading files, before running analysis
 - Dataset and session names are limited to 128 characters
-- If a data source shows status `synching`, wait before running analysis - it needs to be `synched` first
+- Supported file formats: `.csv`, `.tsv`, `.md`, `.mdx`, `.json`, `.txt`, `.pdf`, `.pptx`, `.docx`, `.xls`, `.xlsx`
