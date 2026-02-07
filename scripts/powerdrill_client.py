@@ -18,8 +18,16 @@ from pathlib import Path
 from typing import Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 BASE_URL = "https://ai.data.cloud/api"
+
+# Shared session with automatic retries on transient errors
+_session = requests.Session()
+_retry = Retry(total=3, backoff_factor=1, status_forcelist=[502, 503, 504])
+_session.mount("https://", HTTPAdapter(max_retries=_retry))
+_session.mount("http://", HTTPAdapter(max_retries=_retry))
 
 
 def _get_env():
@@ -71,7 +79,7 @@ def list_datasets(
     params = {"user_id": user_id, "page_number": page_number, "page_size": page_size}
     if search:
         params["search"] = search
-    resp = requests.get(f"{BASE_URL}/v2/team/datasets", headers=_headers(api_key), params=params)
+    resp = _session.get(f"{BASE_URL}/v2/team/datasets", headers=_headers(api_key), params=params)
     return _check_response(resp)
 
 
@@ -81,14 +89,14 @@ def create_dataset(name: str, description: str = "") -> dict:
     payload = {"name": name, "user_id": user_id}
     if description:
         payload["description"] = description
-    resp = requests.post(f"{BASE_URL}/v2/team/datasets", headers=_headers(api_key), json=payload)
+    resp = _session.post(f"{BASE_URL}/v2/team/datasets", headers=_headers(api_key), json=payload)
     return _check_response(resp)
 
 
 def get_dataset_overview(dataset_id: str) -> dict:
     """GET /v2/team/datasets/{id}/overview - Get dataset overview."""
     user_id, api_key = _get_env()
-    resp = requests.get(
+    resp = _session.get(
         f"{BASE_URL}/v2/team/datasets/{dataset_id}/overview",
         headers=_headers(api_key),
         params={"user_id": user_id},
@@ -99,7 +107,7 @@ def get_dataset_overview(dataset_id: str) -> dict:
 def get_dataset_status(dataset_id: str) -> dict:
     """GET /v2/team/datasets/{id}/status - Check data-source sync status."""
     user_id, api_key = _get_env()
-    resp = requests.get(
+    resp = _session.get(
         f"{BASE_URL}/v2/team/datasets/{dataset_id}/status",
         headers=_headers(api_key),
         params={"user_id": user_id},
@@ -110,7 +118,7 @@ def get_dataset_status(dataset_id: str) -> dict:
 def delete_dataset(dataset_id: str) -> dict:
     """DELETE /v2/team/datasets/{id} - Delete a dataset."""
     user_id, api_key = _get_env()
-    resp = requests.delete(
+    resp = _session.delete(
         f"{BASE_URL}/v2/team/datasets/{dataset_id}",
         headers=_headers(api_key),
         json={"user_id": user_id},
@@ -133,7 +141,7 @@ def list_data_sources(
     params = {"user_id": user_id, "page_number": page_number, "page_size": page_size}
     if status:
         params["status"] = status
-    resp = requests.get(
+    resp = _session.get(
         f"{BASE_URL}/v2/team/datasets/{dataset_id}/datasources",
         headers=_headers(api_key),
         params=params,
@@ -160,7 +168,7 @@ def create_data_source(
         payload["file_object_key"] = file_object_key
     else:
         raise ValueError("Either url or file_object_key must be provided")
-    resp = requests.post(
+    resp = _session.post(
         f"{BASE_URL}/v2/team/datasets/{dataset_id}/datasources",
         headers=_headers(api_key),
         json=payload,
@@ -176,7 +184,7 @@ def _initiate_multipart_upload(file_name: str, file_size: int) -> dict:
     """POST /v2/team/file/init-multipart-upload"""
     user_id, api_key = _get_env()
     payload = {"file_name": file_name, "file_size": file_size, "user_id": user_id}
-    resp = requests.post(
+    resp = _session.post(
         f"{BASE_URL}/v2/team/file/init-multipart-upload",
         headers=_headers(api_key),
         json=payload,
@@ -195,7 +203,7 @@ def _complete_multipart_upload(
         "part_etags": part_etags,
         "user_id": user_id,
     }
-    resp = requests.post(
+    resp = _session.post(
         f"{BASE_URL}/v2/team/file/complete-multipart-upload",
         headers=_headers(api_key),
         json=payload,
@@ -233,7 +241,7 @@ def upload_local_file(file_path: str) -> str:
             )
             put_resp.raise_for_status()
             etag = put_resp.headers.get("ETag", "").strip('"')
-            part_etags.append({"part_number": part["number"], "etag": etag})
+            part_etags.append({"number": part["number"], "etag": etag})
 
     # Step 3: Complete
     _complete_multipart_upload(file_object_key, upload_id, part_etags)
@@ -306,7 +314,7 @@ def list_sessions(
     params = {"user_id": user_id, "page_number": page_number, "page_size": page_size}
     if search:
         params["search"] = search
-    resp = requests.get(f"{BASE_URL}/v2/team/sessions", headers=_headers(api_key), params=params)
+    resp = _session.get(f"{BASE_URL}/v2/team/sessions", headers=_headers(api_key), params=params)
     return _check_response(resp)
 
 
@@ -326,14 +334,14 @@ def create_session(
         "max_contextual_job_history": max_contextual_job_history,
         "agent_id": "DATA_ANALYSIS_AGENT",
     }
-    resp = requests.post(f"{BASE_URL}/v2/team/sessions", headers=_headers(api_key), json=payload)
+    resp = _session.post(f"{BASE_URL}/v2/team/sessions", headers=_headers(api_key), json=payload)
     return _check_response(resp)
 
 
 def delete_session(session_id: str) -> dict:
     """DELETE /v2/team/sessions/{id} - Delete a session."""
     user_id, api_key = _get_env()
-    resp = requests.delete(
+    resp = _session.delete(
         f"{BASE_URL}/v2/team/sessions/{session_id}",
         headers=_headers(api_key),
         json={"user_id": user_id},
@@ -374,13 +382,13 @@ def create_job(
         payload["datasource_ids"] = datasource_ids
 
     if not stream:
-        resp = requests.post(
+        resp = _session.post(
             f"{BASE_URL}/v2/team/jobs", headers=_headers(api_key), json=payload
         )
         return _check_response(resp)
 
     # Streaming mode - parse SSE events
-    resp = requests.post(
+    resp = _session.post(
         f"{BASE_URL}/v2/team/jobs",
         headers=_headers(api_key),
         json=payload,
